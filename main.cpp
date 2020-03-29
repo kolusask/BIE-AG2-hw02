@@ -6,7 +6,7 @@
 #include <list>
 #include <queue>
 
-#define INF 255
+#define INF 1000000
 
 #define source 300
 #define sink 301
@@ -22,7 +22,6 @@ struct Node {
     const uint32_t* end() { return adj + nAdj; }
     void add_adj(const uint32_t a) { adj[nAdj++] = a; }
     bool reachable = false;
-    // Used for BFS in FordFulkerson
     bool open = false;
     uint32_t pred;
 
@@ -35,10 +34,7 @@ Node nodes[350];
 
 struct Edge {
     static uint32_t count;
-    bool saturated() const { return maxCap == flow; }
-    uint32_t capacity() const { return maxCap - flow; }
-    uint32_t maxCap;
-    uint32_t flow = 0;
+    uint32_t capacity;
     uint32_t order;
 };
 
@@ -47,7 +43,7 @@ uint32_t Edge::count = 0;
 Edge edges[350][350];
 
 void connect(const uint32_t n1, const uint32_t n2, const uint32_t cap) {
-    edges[n1][n2].maxCap = edges[n2][n1].maxCap = cap;
+    edges[n1][n2].capacity = edges[n2][n1].capacity = cap;
     edges[n1][n2].order = edges[n2][n1].order = Edge::count++;
     nodes[n1].add_adj(n2);
     nodes[n2].add_adj(n1);
@@ -70,7 +66,7 @@ void read_input() {
         uint32_t n1, n2;
         uint32_t cap;
         std::cin >> n1 >> n2 >> cap;
-        connect(n1, n2, uint32_t(cap));
+        connect(n1, n2, cap);
     }
     read_type(source);
     read_type(sink);
@@ -86,7 +82,7 @@ bool find_augmenting_path(EdgeList& path) {
         queue.pop();
         nodes[curr].open = true;
         for (const uint32_t a : nodes[curr]) {
-            if (!nodes[a].open && !edges[curr][a].saturated()) {
+            if (!nodes[a].open && edges[curr][a].capacity) {
                 nodes[a].pred = curr;
                 if (a == sink) {
                     found = true;
@@ -99,7 +95,7 @@ bool find_augmenting_path(EdgeList& path) {
     }
     if (found)
         for (uint32_t n = sink; n != source; n = nodes[n].pred)
-            path.push_front(NodePair(n, nodes[n].pred));
+            path.push_front(NodePair(nodes[n].pred, n));
     for (uint32_t i = 0; i < nNodes; i++)
         nodes[i].open = false;
     return found;
@@ -111,18 +107,18 @@ void algFordFulkerson() {
         auto& minPair = *std::min_element(
             path.begin(), path.end(), 
             [](const NodePair np1, const NodePair np2) -> bool {
-                return edges[np1.first][np1.second].capacity() < edges[np2.first][np2.second].capacity();
+                return edges[np1.first][np1.second].capacity < edges[np2.first][np2.second].capacity;
             }
         );
-        uint32_t minCap = edges[minPair.first][minPair.second].capacity();
+        uint32_t minCap = edges[minPair.first][minPair.second].capacity;
         for (const auto& pair : path) {
-            edges[pair.first][pair.second].flow += minCap;
-            edges[pair.second][pair.first].flow += minCap;
+            edges[pair.first][pair.second].capacity -= minCap;
+            edges[pair.second][pair.first].capacity += minCap;
         }
     }
     uint32_t maxFlow = 0;
     for (uint32_t a : nodes[sink])
-        maxFlow += edges[sink][a].flow;
+        maxFlow += INF - edges[a][sink].capacity;
     std::cout << maxFlow << std::endl;
 }
 
@@ -130,7 +126,7 @@ void mark_reachables(const uint32_t node) {
     nodes[node].open = true;
     nodes[node].reachable = true;
     for (const uint32_t a : nodes[node])
-        if (!nodes[a].open && !edges[node][a].saturated())
+        if (!nodes[a].open && edges[node][a].capacity)
             mark_reachables(a);
 }
 
