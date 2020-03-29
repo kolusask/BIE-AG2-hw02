@@ -1,71 +1,168 @@
-#include <iostream>
+// Max 300 people
+// Max 10000 collaborations
 
-#define INF 100000
+#include <algorithm>
+#include <iostream>
+#include <list>
+#include <queue>
+
+#define INF 255
 
 #define source 300
 #define sink 301
 
-uint16_t nNodes;
-uint16_t nEdges;
+uint32_t nNodes;
+uint32_t nEdges;
+
+using NodePair = std::pair<uint32_t, uint32_t>;
+using EdgeList = std::list<NodePair>;
 
 struct Node {
-    const uint16_t* begin() { return adj; }
-    const uint16_t* end() { return adj + nAdj; }
-    void add_adj(const uint16_t a) { adj[nAdj++] = a; }
+    const uint32_t* begin() { return adj; }
+    const uint32_t* end() { return adj + nAdj; }
+    void add_adj(const uint32_t a) { adj[nAdj++] = a; }
     bool reachable = false;
+    // Used for BFS in FordFulkerson
+    bool open = false;
+    uint32_t pred;
 
   private:
-    uint16_t adj[299];
-    uint16_t nAdj = 0;
+    uint32_t adj[350];
+    uint32_t nAdj = 0;
 };
 
-Node nodes[300];
+Node nodes[350];
 
 struct Edge {
-    uint8_t capacity;
-    uint8_t flow = 0;
+    static uint32_t count;
+    bool saturated() const { return maxCap == flow; }
+    uint32_t capacity() const { return maxCap - flow; }
+    uint32_t maxCap;
+    uint32_t flow = 0;
+    uint32_t order;
 };
 
-Edge edges[301][301];
+uint32_t Edge::count = 0;
 
-void connect(const uint16_t n1, const uint16_t n2, const uint8_t cap) {
-    edges[n1][n2].capacity = edges[n2][n1].capacity = cap;
+Edge edges[350][350];
+
+void connect(const uint32_t n1, const uint32_t n2, const uint32_t cap) {
+    edges[n1][n2].maxCap = edges[n2][n1].maxCap = cap;
+    edges[n1][n2].order = edges[n2][n1].order = Edge::count++;
     nodes[n1].add_adj(n2);
     nodes[n2].add_adj(n1);
 }
 
-void read_type(const uint16_t extraNode) {
-    uint16_t number;
+void read_type(const uint32_t extraNode) {
+    uint32_t number;
     std::cin >> number;
-    for (uint16_t i = 0; i < number; i++) {
-        uint16_t s;
+    for (uint32_t i = 0; i < number; i++) {
+        uint32_t s;
         std::cin >> s;
         connect(s, extraNode, INF);
     }
 }
 
 void read_input() {
-    // Process first line
     std::cin >> nNodes >> nEdges;
     nNodes += 2;
-
-    // Read edge definitions
-    for (uint16_t i = 0; i < nEdges; i++) {
+    for (uint32_t i = 0; i < nEdges; i++) {
         uint32_t n1, n2;
-        uint8_t cap;
+        uint32_t cap;
         std::cin >> n1 >> n2 >> cap;
-        connect(n1, n2, cap);
+        connect(n1, n2, uint32_t(cap));
     }
-
-    // Process sources
     read_type(source);
-
-    // Process sinks
     read_type(sink);
+}
+
+bool find_augmenting_path(EdgeList& path) {
+    path.clear();
+    std::queue<uint32_t> queue;
+    queue.push(source);
+    bool found = false;
+    while (!queue.empty()) {
+        const uint32_t curr = queue.front();
+        queue.pop();
+        nodes[curr].open = true;
+        for (const uint32_t a : nodes[curr]) {
+            if (!nodes[a].open && !edges[curr][a].saturated()) {
+                nodes[a].pred = curr;
+                if (a == sink) {
+                    found = true;
+                    break;
+                }
+                nodes[a].open = true;
+                queue.push(a);
+            }
+        }
+    }
+    if (found)
+        for (uint32_t n = sink; n != source; n = nodes[n].pred)
+            path.push_front(NodePair(n, nodes[n].pred));
+    for (uint32_t i = 0; i < nNodes; i++)
+        nodes[i].open = false;
+    return found;
+}
+
+void algFordFulkerson() {
+    EdgeList path;
+    while (find_augmenting_path(path)) {
+        auto& minPair = *std::min_element(
+            path.begin(), path.end(), 
+            [](const NodePair np1, const NodePair np2) -> bool {
+                return edges[np1.first][np1.second].capacity() < edges[np2.first][np2.second].capacity();
+            }
+        );
+        uint32_t minCap = edges[minPair.first][minPair.second].capacity();
+        for (const auto& pair : path) {
+            edges[pair.first][pair.second].flow += minCap;
+            edges[pair.second][pair.first].flow += minCap;
+        }
+    }
+    uint32_t maxFlow = 0;
+    for (uint32_t a : nodes[sink])
+        maxFlow += edges[sink][a].flow;
+    std::cout << maxFlow << std::endl;
+}
+
+void mark_reachables(const uint32_t node) {
+    nodes[node].open = true;
+    nodes[node].reachable = true;
+    for (const uint32_t a : nodes[node])
+        if (!nodes[a].open && !edges[node][a].saturated())
+            mark_reachables(a);
+}
+
+void print_cut(const uint32_t node) {
+    nodes[node].open = true;
+    for (uint32_t a : nodes[node]) {
+        if (!nodes[a].open) {
+            if (nodes[a].reachable)
+                print_cut(a);
+            else
+                std::cout << edges[node][a].order << ' ';
+        }
+    }
 }
 
 int main() {
     read_input();
-
+    algFordFulkerson();
+    mark_reachables(source);
+    for (uint32_t i = 0; i < nNodes; i++)
+        nodes[i].open = false;
+    print_cut(source);
+    std::cout << std::endl;
     return 0;
 }
+
+/*
+    6 2
+    0 1
+    1 2
+    3
+    0 1 2
+    3
+    3 4 5
+*/
